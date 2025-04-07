@@ -8,6 +8,9 @@
 #define SCREEN_HEIGHT 768
 #define SCREEN_WIDTH 432
 
+#define MAX_VELOCITY 800
+#define MIN_VELOCITY -400
+
 typedef struct {
   Vector2 position;
   Vector2 velocity;
@@ -74,9 +77,9 @@ void DrawBird(Bird *bird, float dt) {
   Vector2 origin =
       (Vector2){currentTexture.width / 2.0, currentTexture.height / 2.0};
 
-  bird->angle = bird->velocity.y != 0
-                    ? Remap(bird->velocity.y, -1200, 1500, -30, 90)
-                    : bird->angle;
+  bird->angle = bird->velocity.y != 0 ? Remap(bird->velocity.y, MIN_VELOCITY,
+                                              MAX_VELOCITY, -30, 90)
+                                      : bird->angle;
 
   DrawTexturePro(currentTexture, source, dest, origin, bird->angle, WHITE);
   DrawCircleV(bird->position, 2, WHITE);
@@ -113,8 +116,8 @@ int main() {
   Bird bird = CreateBird(birdTextures, numTextures);
 
   // TODO: Tune these
-  Vector2 gravity = {.x = 0, .y = 980.0f * 4};
-  Vector2 jumpForce = {.x = 0, .y = -400.0f * 3};
+  Vector2 gravity = {.x = 0, .y = 980.0f};
+  Vector2 jumpForce = {.x = 0, .y = -400.0f};
 
   float dt; // important
   while (!WindowShouldClose()) {
