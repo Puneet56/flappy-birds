@@ -6,10 +6,20 @@
 #include <stdio.h>
 
 #define SCREEN_HEIGHT 768
-#define SCREEN_WIDTH 432
+#define SCREEN_WIDTH 1300
+
+#define SCALE 1.5f
 
 #define MAX_VELOCITY 800
 #define MIN_VELOCITY -400
+
+#define BG_SPEED 40.0f
+#define BG_POS_Y 0
+#define BASE_SPEED BG_SPEED * 3
+#define BASE_POS_Y 600
+
+#define PIPE_GAP 300
+#define PIPE_SPACING 250
 
 typedef struct {
   Vector2 position;
@@ -29,7 +39,7 @@ Bird CreateBird(Texture2D *textures, size_t length) {
 
   Bird bird = {.position = {100, SCREEN_HEIGHT / 2.0f},
                .velocity = {0, 0},
-               .radius = (float)textures[0].height / 2,
+               .radius = (float)textures[0].width / 2,
                .textures = textures,
                .textureLength = length,
 
@@ -71,29 +81,103 @@ void DrawBird(Bird *bird, float dt) {
   Texture2D currentTexture = bird->textures[bird->currentFrame];
 
   Rectangle source = {0, 0, currentTexture.width, currentTexture.height};
-  Rectangle dest = {bird->position.x, bird->position.y, currentTexture.width,
-                    currentTexture.height};
+  Rectangle dest = {bird->position.x, bird->position.y,
+                    currentTexture.width * SCALE,
+                    currentTexture.height * SCALE};
 
-  Vector2 origin =
-      (Vector2){currentTexture.width / 2.0, currentTexture.height / 2.0};
+  Vector2 origin = (Vector2){dest.width / 2.0, dest.height / 2.0};
 
-  bird->angle = bird->velocity.y != 0 ? Remap(bird->velocity.y, MIN_VELOCITY,
-                                              MAX_VELOCITY, -30, 90)
-                                      : bird->angle;
+  // Change angle only if bird is moving else use old angle
+  if (bird->velocity.y != 0) {
+    bird->angle = Remap(bird->velocity.y, MIN_VELOCITY, MAX_VELOCITY, -30, 90);
+  }
 
   DrawTexturePro(currentTexture, source, dest, origin, bird->angle, WHITE);
   DrawCircleV(bird->position, 2, WHITE);
 }
 
-int main() {
+typedef struct {
+  Texture2D texture;
+  float posX;
+  float posY;
+  float scrollSpeed;
+} ScrollingBackground;
+
+ScrollingBackground CreateScrollingBackground(Texture2D texture, float posY,
+                                              float speed) {
+
+  ScrollingBackground bg = {
+      .texture = texture, .posX = 0, .posY = posY, .scrollSpeed = speed};
+  return bg;
+}
+
+void DrawScrollingBackground(ScrollingBackground *bg, float dt) {
+  bg->posX -= bg->scrollSpeed * dt;
+
+  // Reset position when the first image is completely off-screen to the left
+  if (bg->posX <= -bg->texture.width * 1.5f) {
+    bg->posX = 0;
+  }
+
+  Rectangle source = {0, 0, bg->texture.width, bg->texture.height};
+
+  int txH = bg->texture.height * SCALE;
+  int txW = bg->texture.width * SCALE;
+  int renderCount = 2 + SCREEN_WIDTH / txW;
+  if (txW > SCREEN_WIDTH) {
+    renderCount = 2 + txW / SCREEN_WIDTH;
+  }
+
+  for (int i = 0; i < renderCount; i++) {
+    Rectangle dest = {bg->posX + (i * dest.width), bg->posY, txW, txH};
+
+    DrawTexturePro(bg->texture, source, dest, (Vector2){0, 0}, 0, WHITE);
+    DrawRectangleV((Vector2){bg->posX + (i * dest.width), bg->posY},
+                   (Vector2){2, SCREEN_HEIGHT}, RED);
+  }
+}
+
+void DestroyAnimation(ScrollingBackground *b) {
+  assert(b != NULL);
+  UnloadTexture(b->texture);
+}
+
+int main(void) {
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Flappy birds");
   SetTargetFPS(60);
 
   bool gameStarted = false;
 
   Texture2D bgTexture = LoadTexture("./assets/sprites/background-day.png");
+  if (!IsTextureValid(bgTexture)) {
+    TraceLog(LOG_ERROR, "Failed to load background texture");
+    CloseWindow();
+    return 1;
+  } else {
+    TraceLog(LOG_INFO, "Loaded background texture successfully.");
+  }
+  ScrollingBackground background =
+      CreateScrollingBackground(bgTexture, BG_POS_Y, BG_SPEED);
 
-  TraceLog(LOG_INFO, "background %d %d", bgTexture.height, bgTexture.width);
+  Texture2D baseTx = LoadTexture("./assets/sprites/base.png");
+  if (!IsTextureValid(baseTx)) {
+    TraceLog(LOG_ERROR, "Failed to load base texture");
+    CloseWindow();
+    return 1;
+  } else {
+    TraceLog(LOG_INFO, "Loaded background base successfully.");
+  }
+  ScrollingBackground base =
+      CreateScrollingBackground(baseTx, BASE_POS_Y, BASE_SPEED);
+
+  Texture2D pipeTexture = LoadTexture("./assets/sprites/pipe-green.png");
+  if (!IsTextureValid(pipeTexture)) {
+    TraceLog(LOG_ERROR, "Failed to pipe texture");
+    CloseWindow();
+    return 1;
+  } else {
+    TraceLog(LOG_INFO, "Loaded base successfully.");
+  }
 
   Texture2D birdTextures[] = {
       LoadTexture("./assets/sprites/bluebird-upflap.png"),
@@ -102,8 +186,7 @@ int main() {
   };
 
   size_t numTextures = sizeof(birdTextures) / sizeof(birdTextures[0]);
-
-  for (int i = 0; i < numTextures; i++) {
+  for (size_t i = 0; i < numTextures; i++) {
     if (!IsTextureValid(birdTextures[i])) {
       TraceLog(LOG_ERROR, "Failed to load bird texture %d!", i);
       CloseWindow();
@@ -140,24 +223,23 @@ int main() {
 
       bird.velocity.y *= 0.99f;
 
-      if (bird.position.y > SCREEN_HEIGHT - bird.radius) {
-        bird.position.y = SCREEN_HEIGHT - bird.radius;
+      if (bird.position.y > BASE_POS_Y - bird.radius * SCALE) {
+        bird.position.y = BASE_POS_Y - bird.radius * SCALE;
         bird.velocity.y = 0;
       }
 
-      if (bird.position.y < bird.radius) {
-        bird.position.y = bird.radius;
+      if (bird.position.y < bird.radius * SCALE) {
+        bird.position.y = bird.radius * SCALE;
         bird.velocity.y = 0;
       }
     }
 
-    TraceLog(LOG_INFO, "velocity %f", bird.velocity.y);
-
     BeginDrawing();
     ClearBackground(BLACK);
-    DrawTextureEx(bgTexture, (Vector2){0, 0}, 0, 1.5, WHITE);
+    DrawScrollingBackground(&background, dt);
 
     DrawBird(&bird, dt);
+    DrawScrollingBackground(&base, dt);
 
     if (!gameStarted) {
       DrawText("Press S to start!", 10, 10, 20, DARKGRAY);
@@ -169,6 +251,8 @@ int main() {
   }
 
   DestroyBird(&bird);
+  DestroyAnimation(&background);
+  DestroyAnimation(&base);
   CloseWindow();
   return 0;
 }
