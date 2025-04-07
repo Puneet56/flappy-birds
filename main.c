@@ -18,6 +18,7 @@ typedef struct {
   int currentFrame;
   float frameTimer;
   float frameDuration;
+  float angle;
 } Bird;
 
 Bird CreateBird(Texture2D *textures, size_t length) {
@@ -31,7 +32,8 @@ Bird CreateBird(Texture2D *textures, size_t length) {
 
                .currentFrame = 0,  // Start at the first frame
                .frameTimer = 0.0f, // Reset timer
-               .frameDuration = 1.0f / 8.0f};
+               .frameDuration = 1.0f / 8.0f,
+               .angle = 0};
 
   return bird;
 }
@@ -72,8 +74,11 @@ void DrawBird(Bird *bird, float dt) {
   Vector2 origin =
       (Vector2){currentTexture.width / 2.0, currentTexture.height / 2.0};
 
-  int angle = Remap(Vector2Normalize(bird->velocity).y, -1, 1, -30, 90);
-  DrawTexturePro(currentTexture, source, dest, origin, angle, WHITE);
+  bird->angle = bird->velocity.y != 0
+                    ? Remap(bird->velocity.y, -1200, 1500, -30, 90)
+                    : bird->angle;
+
+  DrawTexturePro(currentTexture, source, dest, origin, bird->angle, WHITE);
   DrawCircleV(bird->position, 2, WHITE);
 }
 
@@ -125,6 +130,8 @@ int main() {
 
     if (gameStarted) {
       bird.velocity = Vector2Add(bird.velocity, Vector2Scale(gravity, dt));
+      bird.velocity.y = Clamp(bird.velocity.y, -1200, 1500);
+
       bird.position =
           Vector2Add(bird.position, Vector2Scale(bird.velocity, dt));
 
@@ -140,6 +147,8 @@ int main() {
         bird.velocity.y = 0;
       }
     }
+
+    TraceLog(LOG_INFO, "velocity %f", bird.velocity.y);
 
     BeginDrawing();
     ClearBackground(BLACK);
